@@ -1,6 +1,7 @@
 package service
 
 import java.time.LocalDateTime
+
 import entity.{Event, Order}
 import org.bson.codecs.configuration.CodecRegistries.{fromProviders, fromRegistries}
 import org.bson.codecs.configuration.CodecRegistry
@@ -27,8 +28,21 @@ object DatabaseEventService {
    * @param function
    * @param shipping
    */
-  def insertEvent(function : String, shipping: Order): Unit = {
-    val event = Event(LocalDateTime.now().toString, function, shipping)
+  def insertEvent(function : String,errorDuringExecution: Boolean ,shipping: Order): Unit = {
+    val event = Event(LocalDateTime.now().toString, function,errorDuringExecution, shipping)
     collection.insertOne(event).results()
+  }
+
+  def getLastInsertd() : Event = {
+    collection.find().sort(equal("_id",-1)).limit(1).headResult()
+  }
+
+  /**
+   * Get all events relative to a specific order
+   * @param orderId Which order
+   * @return Events grouped in a sequence
+   */
+  def getEventsOrder(orderId : Int) : Seq[Event] = {
+    collection.find(and(equal("order.id",orderId),equal("errorDuringExecution",false))).results()
   }
 }

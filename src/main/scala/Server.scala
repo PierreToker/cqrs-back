@@ -1,17 +1,14 @@
-
 import java.util
 import java.util.Properties
 
-import entity.Order
+import entity.{Order, OrderStatus}
 import net.liftweb.json._
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
-import service.{AnalysisService, DatabaseEventService, DatabaseService}
+import service.{AnalysisService, DatabaseEventService, DatabaseService, SynchronizeService}
 
 import scala.collection.JavaConverters._
 
 object Server extends App {
-  //KafkaConsumerService.runConsumer()
-
   implicit val formats = DefaultFormats
 
   val props = new Properties()
@@ -24,37 +21,25 @@ object Server extends App {
   val consumer: KafkaConsumer[String, String] = new KafkaConsumer[String, String](props)
   consumer.subscribe(util.Arrays.asList("orders"))
 
+  var orderStatus: Seq[OrderStatus] = DatabaseService.getOrderStatus()
+
+  println(s"Listener up on: " + props.getProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG))
   while (true) {
     val record = consumer.poll(1000).asScala
     for (data <- record.iterator) {
       println(s"Key:" + data.key())
       println(data.value())
       val jValue = parse(data.value())
-      val shipping = jValue.extract[Order]
-      DatabaseEventService.insertEvent(data.key(),shipping)
-      AnalysisService.analysis(shipping,data.key())
-
-      /*
-      println("New entry")
-      println(data.key())
-      println(data.value())
-      data.key() match {
-        case "new" => {
-          val jValue = parse(data.value())
-          val shipping = jValue.extract[Shipping]
-          DatabaseService.addTransfer(shipping)
-        }
-        case "update" => {
-          val jValue = parse(data.value())
-          val shipping = jValue.extract[Shipping]
-          DatabaseService.updateTransfer(shipping.id, shipping.status)
-        }
-        case "delete" => {
-          DatabaseService.deleteTransfer(data.value().toInt)
-        }
-        case _ => println("Unknow request")
+      val order = jValue.extract[Order]
+      var error: Boolean = false
+      if (data.key() == "OrderRestored") {
+        error = SynchronizeService.replayOrder(order,data.key())
+      }else{
+        error = AnalysisService.analysis(order, data.key())
+        DatabaseEventService.insertEvent(data.key(), error, order)
       }
-      */
+      if (error)
+        println("Error during process")
     }
   }
 }

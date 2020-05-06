@@ -1,23 +1,28 @@
 package service
 
-import entity.{Order, OrderStatus}
+import entity.{Event, Order, OrderStatus}
 
 object AnalysisService {
   var orderStatus: Seq[OrderStatus] = DatabaseService.getOrderStatus()
 
   def analysis(OrderCommand: Order, function: String): Boolean = {
     if (function.equals("OrderCreated")){
-      DatabaseService.createOrder(OrderCommand)
+      val idAvailable:Option[Int] = DatabaseEventService.getFreeId
+      val newOrder:Order = OrderCommand.copy(id = idAvailable)
+      DatabaseService.createOrder(newOrder)
+      val event:Event = DatabaseEventService.insertEvent(function, newOrder)
+      DatabaseEventService.updateEventError(event.id,false)
       false
     }else{
-      val databaseOrder = DatabaseService.getTransferById(OrderCommand.id)
-      if (databaseOrder != None) {
+      val databaseOrder = DatabaseService.getOrderById(OrderCommand.id.getOrElse(0))
+      if (!databaseOrder.equals(None)) {
         function match {
           case "OrderStatusUpdatedToNextStep" => {
             if (!orderStatus.find(_.id.toString == OrderCommand.status).isDefined) {
-              println(new NoSuchElementException("Status n° "+ OrderCommand.status+" unknow."))
-              true
-            } else if (databaseOrder.status >= OrderCommand.status) {
+              println(new NoSuchElementException("Status n° " + OrderCommand.status + " unknow."))
+              return true
+            }
+            if (databaseOrder.status >= OrderCommand.status) {
               println(new IllegalStateException("An order cannot rewind (or stay) his status through this way."))
               true
             } else {
@@ -54,7 +59,7 @@ object AnalysisService {
           }
 
           case "OrderDeleted" => {
-            DatabaseService.deleteOrder(OrderCommand.id)
+            DatabaseService.deleteOrder(OrderCommand.id.getOrElse(0))
             false
           }
 

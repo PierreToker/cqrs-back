@@ -1,38 +1,56 @@
 package service
 
-import entity.{Order, OrderStatus}
+import entity.Order
 
 object SynchronizeService {
-  var orderStatus: Seq[OrderStatus] = DatabaseService.getOrderStatus()
 
   /**
-   *
+   * Check if object 'order' from db and event store have the same values.
    */
-  def synchronize() = {
-
+  def synchronize(orderId: Option[Int]): Boolean = {
+    println(s"[--Sync order initiated--]")
+    val orderDB: Order = DatabaseService.getOrderById(orderId.getOrElse(0))
+    val event = DatabaseEventService.getLastEventInsertedOnOrder(orderId.getOrElse(0))
+    val orderEvent: Order = new Order(event.order.id,event.order.shippingDate,event.order.destinationAddress,event.order.customerName,event.order.status)
+    if (orderDB.id.equals(orderEvent.id) && orderDB.customerName.equals(orderEvent.customerName) && orderDB.status.equals(orderEvent.status) && orderDB.destinationAddress.equals(orderEvent.destinationAddress) && orderDB.shippingDate.equals(orderEvent.shippingDate)){
+      println(s"[--Order from db and event are synchronized.--]")
+      false
+    }else{
+      println(s"[--Order form db does not correspond with the order from the event store.--]")
+      true
+    }
   }
 
   /**
    * Replay every action made on an order
-   * @param order
-   * @param function
+   * @param orderId Id of the order to restore
    */
-  def replayOrder(order: Order, function: String): Boolean = {
-    println("Starting the restoration process")
-    val saveInitOrder = DatabaseService.getTransferById(order.id)
-    println("Delete init order")
-    DatabaseService.deleteOrder(order.id)
-    println("get events")
-    val events = DatabaseEventService.getEventsOrder(order.id)
-    events.foreach(println)
+  def replayOrder(orderId: Int): Boolean = {
+    println(s"[--Starting the restoration process--]")
+    val saveInitOrder = DatabaseService.getOrderById(orderId)
+    saveInitOrder match {
+      case s:Order => {
+        println(s"[--Delete init order--]")
+        DatabaseService.deleteOrder(orderId)
+      }
+      case _ => println(s"[--No order found with that id. Continue.--]")
+    }
+    println(s"[--Get events--]")
+    val events = DatabaseEventService.getEventsOrder(orderId)
+    println(s"[--Restoration process in progress...--]")
     events.foreach(event =>
       if (AnalysisService.analysis(event.order, event.function)) {
-        println("Error during the restoration process. The initial order will be restored. [Operation Aborted]")
-        DatabaseService.deleteOrder(order.id)
-        DatabaseService.createOrder(saveInitOrder)
+        println(s"[--Error during the restoration process--]")
+        println(event)
+        DatabaseService.deleteOrder(orderId)
+        if (saveInitOrder.isInstanceOf[Order]) {
+          println(s"[--The initial order will be restored. [Operation Aborted]--]")
+          DatabaseService.createOrder(saveInitOrder)
+        }
         true
       }
     )
+    println(s"[--Restoration process done with no error.--]")
     false
   }
 }

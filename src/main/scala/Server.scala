@@ -1,9 +1,10 @@
 import java.util
 import java.util.Properties
 
-import entity.{Order, OrderStatus}
+import entity.{Event, Order, OrderStatus}
 import net.liftweb.json._
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
+import service.SynchronizeService.replayOrder
 import service.{AnalysisService, DatabaseEventService, DatabaseService, SynchronizeService}
 
 import scala.collection.JavaConverters._
@@ -27,16 +28,28 @@ object Server extends App {
   while (true) {
     val record = consumer.poll(1000).asScala
     for (data <- record.iterator) {
-      println(s"Key:" + data.key())
+      println(s"Command received:" + data.key())
       println(data.value())
-      val jValue = parse(data.value())
-      val order = jValue.extract[Order]
       var error: Boolean = false
       if (data.key() == "OrderRestored") {
-        error = SynchronizeService.replayOrder(order,data.key())
-      }else{
+        error = SynchronizeService.replayOrder(data.value().toInt)
+      } else {
+        val jValue = parse(data.value())
+        val order = jValue.extract[Order]
         error = AnalysisService.analysis(order, data.key())
-        DatabaseEventService.insertEvent(data.key(), error, order)
+        if (data.key() != "OrderCreated") {
+          val event:Event = DatabaseEventService.insertEvent(data.key(), order)
+          if (SynchronizeService.synchronize(order.id)) {
+            println(s"[--Replaying events initiated --]")
+            replayOrder(order.id.getOrElse(0))
+            if (SynchronizeService.synchronize(order.id))
+              println(s"Error during process")
+            else
+              DatabaseEventService.updateEventError(event.id,false)
+          }else{
+            DatabaseEventService.updateEventError(event.id,false)
+          }
+        }
       }
       if (error)
         println("Error during process")

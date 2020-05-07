@@ -5,16 +5,20 @@ import entity.{Event, Order, OrderStatus}
 object AnalysisService {
   var orderStatus: Seq[OrderStatus] = DatabaseService.getOrderStatus()
 
-  def analysis(OrderCommand: Order, function: String): Boolean = {
+  def analysis(OrderCommand: Order, function: String, noNeedId:Boolean = false): Boolean = {
     if (function.equals("OrderCreated")){
-      val idAvailable:Option[Int] = DatabaseEventService.getFreeId
-      val newOrder:Order = OrderCommand.copy(id = idAvailable)
+      var newOrder: Order = OrderCommand
+      if (noNeedId == false) {
+        val idAvailable: Option[Int] = DatabaseEventService.getFreeId
+        //newOrder = OrderCommand.copy(id = idAvailable)
+        newOrder = newOrder.copy(id = idAvailable)
+      }
       DatabaseService.createOrder(newOrder)
       val event:Event = DatabaseEventService.insertEvent(function, newOrder)
       DatabaseEventService.updateEventError(event.id,false)
       false
     }else{
-      val databaseOrder = DatabaseService.getOrderById(OrderCommand.id.getOrElse(0))
+      val databaseOrder:Order = DatabaseService.getOrderById(OrderCommand.id.getOrElse(0))
       if (!databaseOrder.equals(None)) {
         function match {
           case "OrderStatusUpdatedToNextStep" => {
@@ -38,26 +42,6 @@ object AnalysisService {
             }
           }
 
-          case "OrderSetTo" => {
-            if (databaseOrder.status == "confirmed") {
-              DatabaseService.updateOrderStatus(OrderCommand)
-              false
-            } else {
-              true
-              //print("not implemented yet")
-            }
-          }
-
-          case "OrderSetToPrepared" => {
-            if (databaseOrder.status == "confirmed") {
-              DatabaseService.updateOrderStatus(OrderCommand)
-              false
-            } else {
-              true
-              //print("not implemented yet")
-            }
-          }
-
           case "OrderDeleted" => {
             DatabaseService.deleteOrder(OrderCommand.id.getOrElse(0))
             false
@@ -69,7 +53,7 @@ object AnalysisService {
           }
         }
       }else{
-        println("Order n° {} does not exist on database. Action {} aborted.",OrderCommand.id, function)
+        println(s"Order n° {} does not exist on database. Action {} aborted.",OrderCommand.id, function)
         true
       }
     }

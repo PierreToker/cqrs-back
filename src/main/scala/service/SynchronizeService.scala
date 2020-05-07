@@ -27,17 +27,32 @@ object SynchronizeService {
    */
   def replayOrder(orderId: Int): Boolean = {
     println(s"[--Starting the restoration process--]")
-    val saveInitOrder = DatabaseService.getOrderById(orderId)
+    val saveInitOrder:Order = DatabaseService.getOrderById(orderId)
     saveInitOrder match {
-      case s:Order => {
+      case _:Order => {
         println(s"[--Delete init order--]")
         DatabaseService.deleteOrder(orderId)
       }
-      case _ => println(s"[--No order found with that id. Continue.--]")
+      case _ => println(s"[--No order found with that id. Process will continue.--]")
     }
     println(s"[--Get events--]")
     val events = DatabaseEventService.getEventsOrder(orderId)
     println(s"[--Restoration process in progress...--]")
+    for (event <- events){
+      print(event)
+      if (AnalysisService.analysis(event.order, event.function,true)) {
+        println(s"[--Error during the restoration process--]")
+        DatabaseService.deleteOrder(orderId)
+        if (saveInitOrder.isInstanceOf[Order]) {
+          println(s"[--The initial order will be restored. [Operation Aborted]--]")
+          DatabaseService.createOrder(saveInitOrder)
+        }
+        println(s"[ERROR]")
+        true
+      }
+      println(s"[DONE]")
+    }
+    /*
     events.foreach(event =>
       if (AnalysisService.analysis(event.order, event.function)) {
         println(s"[--Error during the restoration process--]")
@@ -50,6 +65,8 @@ object SynchronizeService {
         true
       }
     )
+
+     */
     println(s"[--Restoration process done with no error.--]")
     false
   }

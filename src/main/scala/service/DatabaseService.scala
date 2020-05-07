@@ -10,9 +10,6 @@ import org.mongodb.scala.model.Filters._
 import org.mongodb.scala.model.Updates._
 import util.Helpers._
 
-import scala.concurrent._
-import ExecutionContext.Implicits.global
-
 object DatabaseService {
 
   val mongoClient: MongoClient = MongoClient()
@@ -38,7 +35,6 @@ object DatabaseService {
    * @param order Which order
    */
   def updateOrderStatus(order: Order): Unit = {
-    //collection.updateOne(equal("id", commandOnShipping.id), set("status", commandOnShipping.status)).results()
     collection.findOneAndUpdate(equal("id", order.id.getOrElse(0)), set("status", order.status)).results()
   }
 
@@ -47,7 +43,6 @@ object DatabaseService {
    * @param id Which order
    */
   def deleteOrder(id: Int): Unit = {
-    //collection.deleteOne(equal("id", id)).results()
     collection.findOneAndDelete(equal("id", id)).results()
   }
 

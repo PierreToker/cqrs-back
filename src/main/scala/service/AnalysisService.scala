@@ -10,7 +10,6 @@ object AnalysisService {
       var newOrder: Order = OrderCommand
       if (noNeedId == false) {
         val idAvailable: Option[Int] = DatabaseEventService.getFreeId
-        //newOrder = OrderCommand.copy(id = idAvailable)
         newOrder = newOrder.copy(id = idAvailable)
       }
       DatabaseService.createOrder(newOrder)

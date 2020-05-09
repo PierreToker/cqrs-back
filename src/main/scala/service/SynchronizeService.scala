@@ -52,21 +52,6 @@ object SynchronizeService {
       }
       println(s"[DONE]")
     }
-    /*
-    events.foreach(event =>
-      if (AnalysisService.analysis(event.order, event.function)) {
-        println(s"[--Error during the restoration process--]")
-        println(event)
-        DatabaseService.deleteOrder(orderId)
-        if (saveInitOrder.isInstanceOf[Order]) {
-          println(s"[--The initial order will be restored. [Operation Aborted]--]")
-          DatabaseService.createOrder(saveInitOrder)
-        }
-        true
-      }
-    )
-
-     */
     println(s"[--Restoration process done with no error.--]")
     false
   }

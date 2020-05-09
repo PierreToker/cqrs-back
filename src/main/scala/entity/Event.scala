@@ -1,12 +1,7 @@
 package entity
 
-final case class Event(date: String, function: String, order: Order)
-final case class Transfers(transfers: Seq[Order])
-
-final case class TransferStatusEvent(value: String)
-
-final case class TransferUpdateEvent(transfer: Order, newStatus: TransferStatus)
-final case class TransferDeleteEvent(transfer: Order)
+final case class Event(id:Int, date: String, function: String, errorDuringExecution : Boolean, order: Order)
+final case class Events(Events: Seq[Event])
 
 object Event {
   final case class ActionPerformed(description: String)

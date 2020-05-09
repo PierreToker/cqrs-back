@@ -1,17 +1,15 @@
-
 import java.util
 import java.util.Properties
 
-import entity.Order
+import entity.{Event, Order, OrderStatus}
 import net.liftweb.json._
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
-import service.{AnalysisService, DatabaseEventService, DatabaseService}
+import service.SynchronizeService.replayOrder
+import service.{AnalysisService, DatabaseEventService, DatabaseService, SynchronizeService}
 
 import scala.collection.JavaConverters._
 
 object Server extends App {
-  //KafkaConsumerService.runConsumer()
-
   implicit val formats = DefaultFormats
 
   val props = new Properties()
@@ -24,37 +22,37 @@ object Server extends App {
   val consumer: KafkaConsumer[String, String] = new KafkaConsumer[String, String](props)
   consumer.subscribe(util.Arrays.asList("orders"))
 
+  var orderStatus: Seq[OrderStatus] = DatabaseService.getOrderStatus()
+
+  println(s"Listener up on: " + props.getProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG))
   while (true) {
     val record = consumer.poll(1000).asScala
     for (data <- record.iterator) {
-      println(s"Key:" + data.key())
+      println(s"Command received:" + data.key())
       println(data.value())
-      val jValue = parse(data.value())
-      val shipping = jValue.extract[Order]
-      DatabaseEventService.insertEvent(data.key(),shipping)
-      AnalysisService.analysis(shipping,data.key())
-
-      /*
-      println("New entry")
-      println(data.key())
-      println(data.value())
-      data.key() match {
-        case "new" => {
-          val jValue = parse(data.value())
-          val shipping = jValue.extract[Shipping]
-          DatabaseService.addTransfer(shipping)
+      var error: Boolean = false
+      if (data.key() == "OrderRestored") {
+        error = SynchronizeService.replayOrder(data.value().toInt)
+      } else {
+        val jValue = parse(data.value())
+        val order = jValue.extract[Order]
+        error = AnalysisService.analysis(order, data.key())
+        if (data.key() != "OrderCreated") {
+          val event:Event = DatabaseEventService.insertEvent(data.key(), order)
+          if (SynchronizeService.synchronize(order.id)) {
+            println(s"[--Replaying events initiated --]")
+            replayOrder(order.id.getOrElse(0))
+            if (SynchronizeService.synchronize(order.id))
+              println(s"Error during process")
+            else
+              DatabaseEventService.updateEventError(event.id,false)
+          }else{
+            DatabaseEventService.updateEventError(event.id,false)
+          }
         }
-        case "update" => {
-          val jValue = parse(data.value())
-          val shipping = jValue.extract[Shipping]
-          DatabaseService.updateTransfer(shipping.id, shipping.status)
-        }
-        case "delete" => {
-          DatabaseService.deleteTransfer(data.value().toInt)
-        }
-        case _ => println("Unknow request")
       }
-      */
+      if (error)
+        println("Error during process")
     }
   }
 }
